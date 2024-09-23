@@ -4,10 +4,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Select device to run on
 device = torch.device("mps") if torch.has_mps else torch.device("cpu")
-if device == "cpu":
-    print('sorry couldn’t load gpu')
-else:
-    print('using M1 gpu')
 
 # Load the model and tokenizer
 model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
@@ -27,19 +23,28 @@ print(f"Model {model_name} loaded successfully.")
 model.config.pad_token_id = model.config.eos_token_id
 
 MAX_TOKENS = 100
-RESPONSE_LIMIT_TEXT = "Please limit your response to "
-RESPONSE_LIMIT = f"{MAX_TOKENS} words, treat punctuation as a word."
+TEMPERATURE = 0.2
+TOP_P = 0.9
 
+RESPONSE_LIMIT_TEXT = f"Please limit your response to {MAX_TOKENS} words, treat punctuation as a word."
+ON_TOPIC_TEXT = "We are straying off-topic. Let us return to the topic of guitar studying."
 messages = []
+messages.append(
+    { "role": "user",
+     "content": f"{RESPONSE_LIMIT_TEXT}"})
 
-# Function to query the model
 def query_model(prompt, messages):
     # Add user prompt to messages
     messages.append({"role": "user", "content": prompt})
+
+    # Extract just the content of all messages (user and assistant)
+    topics = ' '.join([msg["content"] for msg in messages])
     
+    print('topics as string: ', topics)
     # Commented validation of topic for now
-    # if not is_allowed_topic(messages):
-    #     return "Please ask questions related to guitar and music lessons."
+    if not is_allowed_topic(topics):
+        response = "We are straying off-topic. Let us return to the topic of guitar studying."
+        return response, messages
     
     # Use the tokenizer's chat template to format input_text
     input_text = tokenizer.apply_chat_template(messages, tokenize=False)
@@ -47,12 +52,14 @@ def query_model(prompt, messages):
     # Tokenize the prompt and ensure padding is added if needed, also generate the attention mask
     inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
     
+    print('inputs', inputs)
+    
     # Generate response from the model
     outputs = model.generate(
         inputs, 
         max_new_tokens=MAX_TOKENS, 
-        temperature=0.3, 
-        top_p=0.9, 
+        temperature=TEMPERATURE, 
+        top_p=TOP_P, 
         do_sample=True
     )
     
@@ -77,6 +84,7 @@ while True:
     
     # Get the model's response and update messages
     response, messages = query_model(prompt, messages)
+    
     
     # Print AI's response
     print(f"AI: {response}")
